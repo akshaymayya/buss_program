@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List
 from ..models.schemas import Employee, TripAssignment
+from .fleet import FLEET_DB  # Import fleet database to update bus status
 
 router = APIRouter()
 
@@ -19,7 +20,7 @@ EMPLOYEES_DB = [
 ]
 
 @router.get("/", response_model=List[Employee])
-async def get_employees(location: str = Query(None, description="Filter by current city"), role: str = Query(None)):
+def get_employees(location: str = Query(None, description="Filter by current city"), role: str = Query(None)):
     """
     Smart Filter: Returns employees based on their current location.
     Essential for ensuring the driver is actually physically present at the bus starting point.
@@ -35,17 +36,36 @@ async def get_employees(location: str = Query(None, description="Filter by curre
     return filtered
 
 @router.post("/assign")
-async def assign_trip(assignment: TripAssignment):
+def assign_trip(assignment: TripAssignment):
     """
-    Assigns a trip and updates the crew's location to the Destination.
-    This ensures the next trip they take must start from the new location.
+    Assigns a trip and updates:
+    1. Crew locations to the Destination
+    2. Bus status to 'On Route' with assignment details
     """
     # 1. Update Crew Locations
     update_ids = [assignment.driver_id, assignment.helper_1_id, assignment.helper_2_id]
+    helper_ids = [assignment.helper_1_id, assignment.helper_2_id]
     
     for emp in EMPLOYEES_DB:
         if emp.id in update_ids:
-            # Logic: They travel to the destination, so their new location becomes the destination
             emp.current_location = assignment.route_destination
+    
+    # 2. Update Bus Status to "On Route" and set assignment details
+    route_str = f"{assignment.route_source} → {assignment.route_destination}"
+    for bus in FLEET_DB:
+        if bus.id == assignment.bus_id:
+            if bus.status == "Maintenance":
+                raise HTTPException(status_code=400, detail="Cannot assign trip to a bus under maintenance")
+            bus.status = "On Route"
+            bus.assigned_route = route_str
+            bus.assigned_date = assignment.travel_date
+            bus.assigned_driver_id = assignment.driver_id
+            bus.assigned_helper_ids = helper_ids
+            break
             
-    return {"status": "success", "message": f"Trip assigned! Crew location updated to {assignment.route_destination}. SMS sent."}
+    return {
+        "status": "success", 
+        "message": f"Trip assigned! Crew location updated to {assignment.route_destination}. Bus status set to 'On Route'. SMS sent.",
+        "route": route_str,
+        "bus_id": assignment.bus_id
+    }

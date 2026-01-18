@@ -13,7 +13,12 @@ class Bus(BaseModel):
     plate_number: str
     type: str
     capacity: int
-    status: str # Available, OnRoute, Maintenance
+    status: str # Available, On Route, Maintenance
+    assigned_route: Optional[str] = None  # e.g., "Bangalore → Mysore"
+    assigned_date: Optional[str] = None   # ISO date string
+    assigned_driver_id: Optional[str] = None
+    assigned_helper_ids: Optional[List[str]] = None
+    last_maintenance_date: Optional[str] = None
 
 class RouteAnalysis(BaseModel):
     source: str
