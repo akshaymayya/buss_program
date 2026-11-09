@@ -9,9 +9,8 @@ from ..models.schemas import (
     TripAssignment, SmartRecommendationRequest, SmartRecommendationsResponse,
     EmployeeLocationHistory, EmployeeTripHistory, AuditLog
 )
-from ..db.database import get_db_connection
+from ..db.database import get_db_connection, immediate_transaction
 from ..services.crew_advisor import crew_advisor
-from .fleet import FLEET_DB
 
 router = APIRouter()
 
@@ -468,140 +467,142 @@ def get_smart_recommendations(req: SmartRecommendationRequest):
 @router.post("/assign")
 def assign_trip(assignment: TripAssignment):
     """
-    Assigns a trip with strict validation:
-    1. Prevents overlapping assignments
+    Assigns a trip with strict validation inside an immediate ACID transaction:
+    1. Validates bus existence and availability in SQLite (rejects Maintenance / On Route)
     2. Validates driver licence
-    3. Respects rest periods
-    4. Confirms crew starting location (warns/requires repositioning if not at source)
-    5. Sets employee status to 'Assigned' (DOES NOT assume arrival until verified!)
-    6. Sets bus status to 'On Route' with trip metadata
+    3. Validates crew existence and availability
+    4. Prevents overlapping assignments
+    5. Respects rest periods
+    6. Confirms crew starting location (location remains at source until verified arrival)
+    7. Sets employee status to 'Assigned'
+    8. Sets bus status to 'On Route' in SQLite with trip metadata
     """
     conn = get_db_connection()
-    cursor = conn.cursor()
+    with immediate_transaction(conn) as cursor:
+        # Verify Bus in SQLite
+        cursor.execute("SELECT id, plate_number, status FROM buses WHERE id = ?", (assignment.bus_id,))
+        bus_row = cursor.fetchone()
+        if not bus_row:
+            raise HTTPException(status_code=400, detail=f"Bus {assignment.bus_id} not found in fleet database")
 
-    # Verify driver exists
-    cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.driver_id,))
-    driver_row = cursor.fetchone()
-    if not driver_row:
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Driver {assignment.driver_id} not found")
+        if bus_row['status'] == "Maintenance":
+            raise HTTPException(status_code=400, detail=f"Cannot assign trip: Bus {bus_row['plate_number']} is under maintenance")
+        if bus_row['status'] == "On Route":
+            raise HTTPException(status_code=400, detail=f"Cannot assign trip: Bus {bus_row['plate_number']} is already assigned and On Route")
 
-    if driver_row['role'] != "Driver":
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Employee {assignment.driver_id} is not registered as a Driver")
+        # Verify driver exists
+        cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.driver_id,))
+        driver_row = cursor.fetchone()
+        if not driver_row:
+            raise HTTPException(status_code=400, detail=f"Driver {assignment.driver_id} not found")
 
-    # Check driver licence expiry
-    if driver_row['licence_expiry']:
-        try:
-            if date.fromisoformat(driver_row['licence_expiry']) < date.today():
-                conn.close()
-                raise HTTPException(status_code=400, detail=f"Driver {driver_row['name']} has an expired licence ({driver_row['licence_expiry']})")
-        except Exception:
-            pass
+        if driver_row['role'] != "Driver":
+            raise HTTPException(status_code=400, detail=f"Employee {assignment.driver_id} is not registered as a Driver")
 
-    # Check helper 1
-    cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.helper_1_id,))
-    h1_row = cursor.fetchone()
-    if not h1_row:
-        conn.close()
-        raise HTTPException(status_code=400, detail=f"Helper {assignment.helper_1_id} not found")
-
-    helper_ids = [assignment.helper_1_id]
-    if assignment.helper_2_id and assignment.helper_2_id.strip():
-        cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.helper_2_id,))
-        h2_row = cursor.fetchone()
-        if not h2_row:
-            conn.close()
-            raise HTTPException(status_code=400, detail=f"Helper {assignment.helper_2_id} not found")
-        helper_ids.append(assignment.helper_2_id)
-
-    all_crew_ids = [assignment.driver_id] + helper_ids
-
-    # Prevent overlapping assignments
-    for cid in all_crew_ids:
-        cursor.execute("""
-            SELECT id, route_source, route_destination, travel_date, status 
-            FROM trip_assignments 
-            WHERE (driver_id = ? OR helper_ids LIKE ?) 
-              AND status IN ('Scheduled', 'En Route')
-              AND travel_date = ?
-        """, (cid, f"%{cid}%", assignment.travel_date))
-        overlap = cursor.fetchone()
-        if overlap:
-            cursor.execute("SELECT name FROM employees WHERE id = ?", (cid,))
-            cname = cursor.fetchone()[0]
-            conn.close()
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Overlapping assignment conflict: {cname} is already assigned to trip {overlap['route_source']} → {overlap['route_destination']} on {assignment.travel_date}"
-            )
-
-    # Check rest period
-    for cid in all_crew_ids:
-        cursor.execute("SELECT name, status, rest_ends_at FROM employees WHERE id = ?", (cid,))
-        emp_st = cursor.fetchone()
-        if emp_st['status'] == "Resting" and emp_st['rest_ends_at']:
+        # Check driver licence expiry
+        if driver_row['licence_expiry']:
             try:
-                rest_end = datetime.fromisoformat(emp_st['rest_ends_at'])
-                dep_dt = datetime.fromisoformat(f"{assignment.travel_date}T{assignment.departure_time or '08:00'}:00")
-                if dep_dt < rest_end:
-                    conn.close()
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"{emp_st['name']} is in mandatory rest until {rest_end.strftime('%d-%b %H:%M')}. Assignment rejected."
-                    )
+                if date.fromisoformat(driver_row['licence_expiry']) < date.today():
+                    raise HTTPException(status_code=400, detail=f"Driver {driver_row['name']} has an expired licence ({driver_row['licence_expiry']})")
             except Exception:
                 pass
 
-    # Generate Trip ID
-    trip_id = f"TRIP-{uuid.uuid4().hex[:6].upper()}"
-    now_str = datetime.now().isoformat()
-    route_str = f"{assignment.route_source} → {assignment.route_destination}"
+        # Check helper 1
+        cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.helper_1_id,))
+        h1_row = cursor.fetchone()
+        if not h1_row:
+            raise HTTPException(status_code=400, detail=f"Helper {assignment.helper_1_id} not found")
 
-    # Insert trip assignment into SQLite
-    cursor.execute("""
-        INSERT INTO trip_assignments (
-            id, company_id, bus_id, route_source, route_destination,
-            travel_date, departure_time, driver_id, helper_ids, status,
-            notes, created_at
-        ) VALUES (?, 'CMP-001', ?, ?, ?, ?, ?, ?, ?, 'Scheduled', ?, ?)
-    """, (
-        trip_id, assignment.bus_id, assignment.route_source, assignment.route_destination,
-        assignment.travel_date, assignment.departure_time or "08:00",
-        assignment.driver_id, json.dumps(helper_ids),
-        assignment.notes or f"Created by {assignment.authorized_by or 'Management'}",
-        now_str
-    ))
+        helper_ids = [assignment.helper_1_id]
+        if assignment.helper_2_id and assignment.helper_2_id.strip():
+            cursor.execute("SELECT * FROM employees WHERE id = ?", (assignment.helper_2_id,))
+            h2_row = cursor.fetchone()
+            if not h2_row:
+                raise HTTPException(status_code=400, detail=f"Helper {assignment.helper_2_id} not found")
+            helper_ids.append(assignment.helper_2_id)
 
-    # Update employee status to 'Assigned'
-    # IMPORTANT RULE: Location stays at SOURCE until arrival is officially verified!
-    cursor.execute(f"""
-        UPDATE employees 
-        SET status = 'Assigned'
-        WHERE id IN ({','.join(['?']*len(all_crew_ids))})
-    """, all_crew_ids)
+        all_crew_ids = [assignment.driver_id] + helper_ids
 
-    # Audit log
-    cursor.execute("""
-        INSERT INTO audit_logs (timestamp, action, entity_type, entity_id, user_role, details, company_id)
-        VALUES (?, 'TRIP_ASSIGNED', 'TRIP', ?, ?, ?, 'CMP-001')
-    """, (
-        now_str, trip_id, assignment.authorized_by or 'Management Staff',
-        f"Assigned trip {route_str} on {assignment.travel_date} to Driver {driver_row['name']} (Bus {assignment.bus_id})"
-    ))
+        # Prevent overlapping assignments
+        for cid in all_crew_ids:
+            cursor.execute("""
+                SELECT id, route_source, route_destination, travel_date, status 
+                FROM trip_assignments 
+                WHERE (driver_id = ? OR helper_ids LIKE ?) 
+                  AND status IN ('Scheduled', 'En Route')
+                  AND travel_date = ?
+            """, (cid, f"%{cid}%", assignment.travel_date))
+            overlap = cursor.fetchone()
+            if overlap:
+                cursor.execute("SELECT name FROM employees WHERE id = ?", (cid,))
+                cname = cursor.fetchone()[0]
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Overlapping assignment conflict: {cname} is already assigned to trip {overlap['route_source']} → {overlap['route_destination']} on {assignment.travel_date}"
+                )
 
-    conn.commit()
+        # Check rest period
+        for cid in all_crew_ids:
+            cursor.execute("SELECT name, status, rest_ends_at FROM employees WHERE id = ?", (cid,))
+            emp_st = cursor.fetchone()
+            if emp_st['status'] == "Resting" and emp_st['rest_ends_at']:
+                try:
+                    rest_end = datetime.fromisoformat(emp_st['rest_ends_at'])
+                    dep_dt = datetime.fromisoformat(f"{assignment.travel_date}T{assignment.departure_time or '08:00'}:00")
+                    if dep_dt < rest_end:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"{emp_st['name']} is in mandatory rest until {rest_end.strftime('%d-%b %H:%M')}. Assignment rejected."
+                        )
+                except Exception:
+                    pass
+
+        # Generate Trip ID
+        trip_id = f"TRIP-{uuid.uuid4().hex[:6].upper()}"
+        now_str = datetime.now().isoformat()
+        route_str = f"{assignment.route_source} → {assignment.route_destination}"
+
+        # Insert trip assignment into SQLite
+        cursor.execute("""
+            INSERT INTO trip_assignments (
+                id, company_id, bus_id, route_source, route_destination,
+                travel_date, departure_time, driver_id, helper_ids, status,
+                notes, created_at
+            ) VALUES (?, 'CMP-001', ?, ?, ?, ?, ?, ?, ?, 'Scheduled', ?, ?)
+        """, (
+            trip_id, assignment.bus_id, assignment.route_source, assignment.route_destination,
+            assignment.travel_date, assignment.departure_time or "08:00",
+            assignment.driver_id, json.dumps(helper_ids),
+            assignment.notes or f"Created by {assignment.authorized_by or 'Management'}",
+            now_str
+        ))
+
+        # Update employee status to 'Assigned'
+        # IMPORTANT RULE: Location stays at SOURCE until arrival is officially verified!
+        cursor.execute(f"""
+            UPDATE employees 
+            SET status = 'Assigned'
+            WHERE id IN ({','.join(['?']*len(all_crew_ids))})
+        """, all_crew_ids)
+
+        # Update Bus status to 'On Route' in SQLite
+        cursor.execute("""
+            UPDATE buses
+            SET status = 'On Route', assigned_route = ?, assigned_date = ?,
+                assigned_driver_id = ?, assigned_helper_ids = ?
+            WHERE id = ?
+        """, (route_str, assignment.travel_date, assignment.driver_id, json.dumps(helper_ids), assignment.bus_id))
+
+        # Audit log
+        cursor.execute("""
+            INSERT INTO audit_logs (timestamp, action, entity_type, entity_id, user_role, details, company_id)
+            VALUES (?, 'TRIP_ASSIGNED', 'TRIP', ?, ?, ?, 'CMP-001')
+        """, (
+            now_str, trip_id, assignment.authorized_by or 'Management Staff',
+            f"Assigned trip {route_str} on {assignment.travel_date} to Driver {driver_row['name']} (Bus {bus_row['plate_number']})"
+        ))
+
     conn.close()
-
-    # Update in-memory FLEET_DB for backward compatibility
-    for bus in FLEET_DB:
-        if bus.id == assignment.bus_id:
-            bus.status = "On Route"
-            bus.assigned_route = route_str
-            bus.assigned_date = assignment.travel_date
-            bus.assigned_driver_id = assignment.driver_id
-            bus.assigned_helper_ids = helper_ids
-            break
 
     return {
         "status": "success",
@@ -609,6 +610,7 @@ def assign_trip(assignment: TripAssignment):
         "message": f"Trip {trip_id} successfully assigned! Driver and Helpers set to 'Assigned' at {assignment.route_source}. Awaiting dispatch.",
         "route": route_str,
         "bus_id": assignment.bus_id,
+        "bus_plate": bus_row['plate_number'],
         "driver": driver_row['name'],
         "starting_location": assignment.route_source,
         "destination": assignment.route_destination

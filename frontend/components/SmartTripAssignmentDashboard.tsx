@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import SearchableSelect from './SearchableSelect';
 import { INDIAN_CITIES } from '../data/cities';
+import { apiUrl } from '../lib/api';
 
 interface Bus {
     id: string;
@@ -88,7 +89,7 @@ const SmartTripAssignmentDashboard: React.FC<SmartTripAssignmentDashboardProps> 
 
     const fetchBuses = async () => {
         try {
-            const res = await fetch('http://localhost:8000/api/fleet/');
+            const res = await fetch(apiUrl('/api/fleet/'));
             if (res.ok) {
                 const data: Bus[] = await res.json();
                 setBuses(data);
@@ -103,7 +104,7 @@ const SmartTripAssignmentDashboard: React.FC<SmartTripAssignmentDashboardProps> 
     const fetchSmartRecommendations = async () => {
         setLoadingRecs(true);
         try {
-            const res = await fetch('http://localhost:8000/api/employees/smart-recommendations', {
+            const res = await fetch(apiUrl('/api/employees/smart-recommendations'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -149,7 +150,7 @@ const SmartTripAssignmentDashboard: React.FC<SmartTripAssignmentDashboardProps> 
         setAssigning(true);
         setAssignmentSuccessMsg(null);
         try {
-            const res = await fetch('http://localhost:8000/api/employees/assign', {
+            const res = await fetch(apiUrl('/api/employees/assign'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

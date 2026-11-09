@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 interface Bus {
     id: string;
@@ -30,7 +31,7 @@ const FleetManager = () => {
     const fetchFleet = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/api/fleet/');
+            const res = await fetch(apiUrl('/api/fleet/'));
             if (res.ok) {
                 const data = await res.json();
                 setFleet(data);
@@ -46,7 +47,7 @@ const FleetManager = () => {
         if (!newBus.plate_number || !newBus.type) return;
 
         try {
-            const res = await fetch('http://localhost:8000/api/fleet/', {
+            const res = await fetch(apiUrl('/api/fleet/'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newBus)
@@ -65,7 +66,7 @@ const FleetManager = () => {
     const handleDelete = async (id: string) => {
         if (!confirm("Are you sure you want to remove this bus?")) return;
         try {
-            await fetch(`http://localhost:8000/api/fleet/${id}`, { method: 'DELETE' });
+            await fetch(apiUrl(`/api/fleet/${id}`), { method: 'DELETE' });
             fetchFleet();
         } catch (err) {
             console.error("Failed to delete", err);
@@ -74,7 +75,7 @@ const FleetManager = () => {
 
     const handleStatusUpdate = async (id: string, newStatus: string) => {
         try {
-            const res = await fetch(`http://localhost:8000/api/fleet/${id}/status?status=${newStatus}`, {
+            const res = await fetch(apiUrl(`/api/fleet/${id}/status?status=${newStatus}`), {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' }
             });
