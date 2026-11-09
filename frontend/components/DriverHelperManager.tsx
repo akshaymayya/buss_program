@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 export interface Employee {
     id: string;
@@ -115,8 +116,8 @@ const DriverHelperManager: React.FC = () => {
             if (searchQuery.trim()) params.append('search', searchQuery.trim());
 
             const [empRes, statsRes] = await Promise.all([
-                fetch(`http://localhost:8000/api/employees/?${params.toString()}`),
-                fetch('http://localhost:8000/api/employees/stats')
+                fetch(apiUrl(`/api/employees/?${params.toString()}`)),
+                fetch(apiUrl('/api/employees/stats'))
             ]);
 
             if (empRes.ok) setEmployees(await empRes.json());
@@ -137,7 +138,7 @@ const DriverHelperManager: React.FC = () => {
         setShowHistoryModal(emp);
         setHistoryLoading(true);
         try {
-            const res = await fetch(`http://localhost:8000/api/employees/${emp.id}/history`);
+            const res = await fetch(apiUrl(`/api/employees/${emp.id}/history`));
             if (res.ok) {
                 setHistoryData(await res.json());
             }
@@ -158,7 +159,7 @@ const DriverHelperManager: React.FC = () => {
 
     const handleClearRest = async (empId: string) => {
         try {
-            const res = await fetch(`http://localhost:8000/api/employees/${empId}/complete-rest`, {
+            const res = await fetch(apiUrl(`/api/employees/${empId}/complete-rest`), {
                 method: 'POST'
             });
             if (res.ok) {
@@ -182,7 +183,7 @@ const DriverHelperManager: React.FC = () => {
 
         setSubmittingAdd(true);
         try {
-            const res = await fetch('http://localhost:8000/api/employees/', {
+            const res = await fetch(apiUrl('/api/employees/'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newEmp)
@@ -222,7 +223,7 @@ const DriverHelperManager: React.FC = () => {
 
         setSubmittingOverride(true);
         try {
-            const res = await fetch(`http://localhost:8000/api/employees/${showOverrideModal.id}/override`, {
+            const res = await fetch(apiUrl(`/api/employees/${showOverrideModal.id}/override`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

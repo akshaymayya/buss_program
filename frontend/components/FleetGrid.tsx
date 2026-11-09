@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 interface Bus {
     id: string;
@@ -35,8 +36,8 @@ const FleetGrid = () => {
         setLoading(true);
         try {
             const [fleetRes, statsRes] = await Promise.all([
-                fetch('http://localhost:8000/api/fleet/'),
-                fetch('http://localhost:8000/api/fleet/stats')
+                fetch(apiUrl('/api/fleet/')),
+                fetch(apiUrl('/api/fleet/stats'))
             ]);
             if (fleetRes.ok) setBuses(await fleetRes.json());
             if (statsRes.ok) setStats(await statsRes.json());
@@ -51,7 +52,7 @@ const FleetGrid = () => {
         if (!confirm("Cancel this trip? The vehicle will be released to available status.")) return;
         setActionLoading(busId);
         try {
-            const res = await fetch(`http://localhost:8000/api/fleet/${busId}/cancel-trip`, {
+            const res = await fetch(apiUrl(`/api/fleet/${busId}/cancel-trip`), {
                 method: 'PUT'
             });
             if (res.ok) {
@@ -71,7 +72,7 @@ const FleetGrid = () => {
         if (!confirm("Send this vehicle to maintenance depot?")) return;
         setActionLoading(busId);
         try {
-            const res = await fetch(`http://localhost:8000/api/fleet/${busId}/maintenance`, {
+            const res = await fetch(apiUrl(`/api/fleet/${busId}/maintenance`), {
                 method: 'PUT'
             });
             if (res.ok) {
@@ -90,7 +91,7 @@ const FleetGrid = () => {
     const handleCompleteMaintenance = async (busId: string) => {
         setActionLoading(busId);
         try {
-            const res = await fetch(`http://localhost:8000/api/fleet/${busId}/complete-maintenance`, {
+            const res = await fetch(apiUrl(`/api/fleet/${busId}/complete-maintenance`), {
                 method: 'PUT'
             });
             if (res.ok) fetchFleet();

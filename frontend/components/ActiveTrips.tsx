@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 interface ActiveTrip {
     id: string;
@@ -36,12 +37,12 @@ const ActiveTrips = () => {
 
     const fetchActiveTrips = async () => {
         try {
-            const res = await fetch('http://localhost:8000/api/trips/active');
+            const res = await fetch(apiUrl('/api/trips/active'));
             if (res.ok) {
                 const data = await res.json();
                 setTrips(data);
             } else {
-                const fRes = await fetch('http://localhost:8000/api/fleet/?status=On%20Route');
+                const fRes = await fetch(apiUrl('/api/fleet/?status=On%20Route'));
                 if (fRes.ok) {
                     const buses = await fRes.json();
                     const mapped = buses.map((bus: any) => ({
@@ -70,7 +71,7 @@ const ActiveTrips = () => {
 
     const handleDepartTrip = async (tripId: string) => {
         try {
-            const res = await fetch(`http://localhost:8000/api/trips/${tripId}/depart`, {
+            const res = await fetch(apiUrl(`/api/trips/${tripId}/depart`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ verified_by: 'Depot Dispatcher' })
@@ -88,7 +89,7 @@ const ActiveTrips = () => {
         if (!verifyingTrip) return;
         setSubmittingVerification(true);
         try {
-            const res = await fetch(`http://localhost:8000/api/trips/${verifyingTrip.id}/verify-arrival`, {
+            const res = await fetch(apiUrl(`/api/trips/${verifyingTrip.id}/verify-arrival`), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -118,7 +119,7 @@ const ActiveTrips = () => {
     const handleCancelTrip = async (tripId: string) => {
         if (!confirm("Cancel this trip? Crew and bus will return to available status at their current hub.")) return;
         try {
-            const res = await fetch(`http://localhost:8000/api/trips/${tripId}/cancel`, {
+            const res = await fetch(apiUrl(`/api/trips/${tripId}/cancel`), {
                 method: 'POST'
             });
             if (res.ok) {

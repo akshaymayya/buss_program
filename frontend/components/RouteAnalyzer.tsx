@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import SearchableSelect from './SearchableSelect';
 import { INDIAN_CITIES } from '../data/cities';
 import TripAssignmentModal from './TripAssignmentModal';
+import { apiUrl } from '../lib/api';
 
 interface AnalysisResult {
     source: string;
@@ -67,7 +68,7 @@ const RouteAnalyzer = () => {
         }
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/api/routes/analyze', {
+            const response = await fetch(apiUrl('/api/routes/analyze'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

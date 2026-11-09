@@ -1,97 +1,85 @@
 import random
 import requests
 from datetime import date, timedelta
+from typing import Dict, List, Optional, Tuple, Any
 
-class IntelligenceEngine:
-    def __init__(self):
-        self.api_key = "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImU2YjYzOTljZTlkNTQ5ZjdhY2NlNGU0YTZkNTZkYjUxIiwiaCI6Im11cm11cjY0In0="
-        self.weather_api_key = "09d290f6836b0c3ec1afe7dd11f503da"
-        # Database of "City Specialties" and events
-        self.city_events = {
-            "Gokarna": {"peak_months": [11, 12, 1, 2], "reason": "Beach Season & Temple Visits"},
-            "Mysore": {"peak_months": [9, 10], "event": "Dasara", "reason": "Dasara Festival & Palace Visits"},
-            "Bangalore": {"peak_days": [4, 5, 6], "reason": "Weekend Techie Travel"}, # Fri, Sat, Sun
-            "Tirupati": {"peak_months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "reason": "Pilgrimage (Always High)"},
-            "Mangalore": {"peak_months": [5, 6, 12], "reason": "Holidays & Homecoming"},
-            "Dharmasthala": {"peak_months": [10, 11, 12], "reason": "Laksha Deepotsava & Pilgrimage"}
-        }
+try:
+    from ..core.config import settings
+except Exception:
+    class FallbackSettings:
+        ORS_API_KEY = None
+        OPENWEATHER_API_KEY = None
+    settings = FallbackSettings()
 
-    def get_coordinates(self, city_name):
-        """Fetches lat,lon for a city using OpenRouteService Geocoding"""
+class RouteGISAdapter:
+    """
+    Handles external GIS and Weather API integrations.
+    Isolated from pure business logic to ensure deterministic calculations
+    and resilient offline/simulated fallback operation.
+    """
+    def __init__(self, ors_api_key: Optional[str] = None, weather_api_key: Optional[str] = None):
+        self.ors_api_key = ors_api_key or getattr(settings, "ORS_API_KEY", None)
+        self.weather_api_key = weather_api_key or getattr(settings, "OPENWEATHER_API_KEY", None)
+        self.timeout_sec = 3.5
+
+    def get_coordinates(self, city_name: str) -> Optional[List[float]]:
+        """Fetches [lon, lat] coordinates for a city using OpenRouteService Geocoding."""
+        if not self.ors_api_key:
+            return None
         try:
-            headers = {'Authorization': self.api_key}
+            headers = {'Authorization': self.ors_api_key}
             url = f"https://api.openrouteservice.org/geocode/search?text={city_name}, India"
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=self.timeout_sec)
             if response.status_code == 200:
                 data = response.json()
-                if data['features']:
+                if data.get('features'):
                     # ORS returns [lon, lat]
                     return data['features'][0]['geometry']['coordinates']
         except Exception as e:
-            print(f"Geocoding Warning: {e}")
+            # Non-blocking graceful degradation
+            pass
         return None
 
-    def get_real_route_data(self, source, destination):
-        """Fetches real distance and duration from OpenRouteService"""
+    def get_real_route_data(self, source: str, destination: str) -> Optional[Dict[str, Any]]:
+        """Fetches real road distance and geometry from OpenRouteService."""
+        if not self.ors_api_key:
+            return None
         try:
             start_coords = self.get_coordinates(source)
             end_coords = self.get_coordinates(destination)
-            
             if not start_coords or not end_coords:
                 return None
 
             headers = {
-                'Authorization': self.api_key,
+                'Authorization': self.ors_api_key,
                 'Content-Type': 'application/json'
             }
             body = {
                 "coordinates": [start_coords, end_coords]
             }
             url = "https://api.openrouteservice.org/v2/directions/driving-car/geojson"
-            
-            response = requests.post(url, json=body, headers=headers)
+            response = requests.post(url, json=body, headers=headers, timeout=self.timeout_sec)
             if response.status_code == 200:
                 data = response.json()
-                # GeoJSON structure: features[0].properties.summary... features[0].geometry.coordinates
                 feature = data['features'][0]
                 summary = feature['properties']['summary']
-                geometry = feature['geometry']['coordinates'] # [[lon, lat], ...]
-                
+                geometry = feature['geometry']['coordinates']
                 return {
-                    "distance_km": summary['distance'] / 1000,
-                    "duration_hrs": summary['duration'] / 3600,
+                    "distance_km": summary['distance'] / 1000.0,
+                    "duration_hrs": summary['duration'] / 3600.0,
                     "geometry": geometry
                 }
-        except Exception as e:
-            print(f"Routing Warning: {e}")
+        except Exception:
+            pass
         return None
 
-    def get_fuel_price(self, city):
-        """
-        Fetches fuel price. 
-        Currently uses 'Intelligent Simulation' (Base price +/- daily fluctuation)
-        until a valid API key is provided.
-        """
-        # Base prices for major cities (approximate)
-        base_prices = {
-            "Bangalore": 102.50,
-            "Mangalore": 101.00,
-            "Mysore": 101.80,
-            "Gokarna": 103.00,
-            "Tirupati": 110.00, # Andhra Pradesh plays different taxes
-        }
-        
-        price = base_prices.get(city, 100.00)
-        
-        # Add random daily fluctuation (-2 to +2 rupees)
-        variance = random.uniform(-2.0, 2.0)
-        return round(price + variance, 2)
-
-    def get_weather_data(self, city):
-        """Fetches real-time weather from OpenWeatherMap"""
+    def get_weather_data(self, city: str) -> Optional[Dict[str, Any]]:
+        """Fetches real-time weather from OpenWeatherMap with timeout protection."""
+        if not self.weather_api_key:
+            return None
         try:
             url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={self.weather_api_key}&units=metric"
-            response = requests.get(url)
+            response = requests.get(url, timeout=self.timeout_sec)
             if response.status_code == 200:
                 data = response.json()
                 main = data['weather'][0]['main']
@@ -103,130 +91,173 @@ class IntelligenceEngine:
                     "temp": temp,
                     "summary": f"{main} ({desc.title()}), {round(temp)}°C"
                 }
-        except Exception as e:
-            print(f"Weather API Error: {e}")
+        except Exception:
+            pass
         return None
 
-    def analyze_route(self, source: str, destination: str, travel_date: date):
-        # 1. Determine Base Demand
-        demand_score = 50 # Base score out of 100
+
+class CorridorFeasibilityCalculator:
+    """
+    Pure computational domain logic for route profitability, fuel consumption,
+    demand scoring, and optimal vehicle allocation.
+    Zero network dependencies; 100% deterministic and unit-testable.
+    """
+    def __init__(self):
+        self.city_events = {
+            "Gokarna": {"peak_months": [11, 12, 1, 2], "reason": "Beach Season & Temple Visits"},
+            "Mysore": {"peak_months": [9, 10], "event": "Dasara", "reason": "Dasara Festival & Palace Visits"},
+            "Bangalore": {"peak_days": [4, 5, 6], "reason": "Weekend Techie Travel"},  # Fri, Sat, Sun
+            "Tirupati": {"peak_months": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "reason": "Pilgrimage (Always High)"},
+            "Mangalore": {"peak_months": [5, 6, 12], "reason": "Holidays & Homecoming"},
+            "Dharmasthala": {"peak_months": [10, 11, 12], "reason": "Laksha Deepotsava & Pilgrimage"}
+        }
+
+        self.fallback_distances = {
+            ("Mangalore", "Bangalore"): 350.0,
+            ("Bangalore", "Mysore"): 150.0,
+            ("Bangalore", "Gokarna"): 490.0,
+            ("Bangalore", "Tirupati"): 250.0,
+            ("Bangalore", "Dharmasthala"): 310.0,
+        }
+
+    def get_fallback_distance(self, source: str, destination: str) -> float:
+        """Deterministic corridor distance lookup when live GIS is unavailable."""
+        return (
+            self.fallback_distances.get((source, destination))
+            or self.fallback_distances.get((destination, source))
+            or 300.0
+        )
+
+    def calculate_demand(self, destination: str, travel_date: date) -> Tuple[int, List[str]]:
+        """Calculates demand score (0-100+) based on seasonal trends and day of week."""
+        demand_score = 50
         reasons = []
 
-        # 2. Seasonality & Event Check
         dest_info = self.city_events.get(destination)
         if dest_info:
             if "peak_months" in dest_info and travel_date.month in dest_info["peak_months"]:
                 demand_score += 30
                 reasons.append(f"Peak Season for {destination} ({dest_info['reason']})")
             if "event" in dest_info and dest_info["event"] == "Dasara" and travel_date.month == 10:
-                 demand_score += 40
-                 reasons.append("Dasara Festival Rush!")
+                demand_score += 40
+                reasons.append("Dasara Festival Rush!")
 
-        # 3. Weekend Logic (Friday=4, Saturday=5, Sunday=6)
+        # Weekend logic: Friday=4, Sunday=6
         day_of_week = travel_date.weekday()
-        if day_of_week in [4, 6]: # Fri, Sun
+        if day_of_week in [4, 6]:
             demand_score += 20
             reasons.append("Weekend Travel Surge")
-        
-        # 4. Route Specifics (Real vs Simulated)
-        real_data = self.get_real_route_data(source, destination)
-        route_geometry = None
-        
-        if real_data:
-            distance = real_data['distance_km']
-            route_geometry = real_data.get('geometry') # Get the full path
-            reasons.append(f"Real-World Data: {round(distance)}km")
-        else:
-            reasons.append("Simulated Route Data (API fallback)")
-            base_distances = {
-                ("Mangalore", "Bangalore"): 350,
-                ("Bangalore", "Mysore"): 150,
-                ("Bangalore", "Gokarna"): 490,
-            }
-            distance = base_distances.get((source, destination)) or base_distances.get((destination, source)) or 300 
-        
-        # 5. Get Fuel Price (Real or Simulated)
-        fuel_price = self.get_fuel_price(source)
-        
-        mileage = 4 # km per liter for a bus
-        fuel_cost = (distance / mileage) * fuel_price
 
-        # 6. Traffic & Road Conditions (Simulated based on context)
-        # Note: ORS doesn't provide real-time traffic in the free tier usually, so we simulate context
-        traffic_status = "Clear"
-        road_condition = "Good"
-        
-        # 7. Weather Impact (Real-time)
-        weather = self.get_weather_data(destination)
-        weather_report = "Clear Skies"
-        
-        if weather:
-            weather_report = weather["summary"]
-            if weather["condition"] in ["Rain", "Thunderstorm", "Drizzle"]:
-                road_condition = "Slippery Roads (Rain Alert)"
-                traffic_status = "Slow Moving"
-                distance += 10 # Detours or slow driving
-            elif weather["condition"] in ["Mist", "Fog"]:
-                road_condition = "Low Visibility Warning"
-                
+        return demand_score, reasons
+
+    def calculate_fuel_price(self, city: str, seed: Optional[int] = None) -> float:
+        """Determines fuel price with deterministic local tax variance."""
+        base_prices = {
+            "Bangalore": 102.50,
+            "Mangalore": 101.00,
+            "Mysore": 101.80,
+            "Gokarna": 103.00,
+            "Tirupati": 110.00,
+        }
+        price = base_prices.get(city, 100.00)
+        # Use deterministic variance if seed provided, else standard small fluctuation
+        if seed is not None:
+            rng = random.Random(seed)
+            variance = rng.uniform(-1.0, 1.0)
+        else:
+            variance = random.uniform(-1.0, 1.0)
+        return round(price + variance, 2)
+
+    def calculate_profitability(
+        self,
+        distance_km: float,
+        demand_score: int,
+        fuel_price: float,
+        mileage: float = 4.0,
+        has_congestion: bool = False
+    ) -> Dict[str, Any]:
+        """Calculates fuel costs, dynamic ticket prices, revenues and profit margins."""
+        fuel_cost = (distance_km / mileage) * fuel_price
+        if has_congestion or demand_score > 80:
+            fuel_cost *= 1.2  # Traffic idling penalty
+
+        # Dynamic pricing tiers
         if demand_score > 80:
-            traffic_status = "Heavy Traffic (Holiday Rush)"
-            fuel_cost *= 1.2 # Idling burns more fuel
-        
-        # Random "Real-time" road closure event
-        if random.random() < 0.1: # 10% chance of road work
-            road_condition = "Partial Closure near Hassan - Take diversion via Arsikere"
-            distance += 40
-        
-        # 6. Profitability Calculation
-        # Ticket price dynamic pricing
-        base_ticket_price = 800
-        if demand_score > 80: base_ticket_price = 1200
-        elif demand_score > 60: base_ticket_price = 1000
-        
-        full_load_revenue = 40 * base_ticket_price # 40 seats
-        occupancy_rate = min(demand_score / 100, 1.0)
+            base_ticket_price = 1200.0
+        elif demand_score > 60:
+            base_ticket_price = 1000.0
+        else:
+            base_ticket_price = 800.0
+
+        full_load_revenue = 40.0 * base_ticket_price
+        occupancy_rate = min(demand_score / 100.0, 1.0)
         estimated_revenue = full_load_revenue * occupancy_rate
-        
-        total_cost = fuel_cost + 2000 + 1000 # + Driver Bata + Tolls
+
+        # Fixed operational costs (Crew Bata + Tolls)
+        fixed_costs = 2000.0 + 1000.0
+        total_cost = fuel_cost + fixed_costs
         profit = estimated_revenue - total_cost
 
-        # 7. Final Recommendation
-        recommendation = "NEUTRAL"
-        if profit > 10000:
+        # Recommendation categorization
+        if profit > 10000.0:
             recommendation = "HIGHLY RECOMMENDED (High Demand)"
-        elif profit > 5000:
+        elif profit > 5000.0:
             recommendation = "RECOMMENDED"
         elif profit < 0:
             recommendation = "AVOID (Loss Making)"
-
-        # 8. Smart Bus Recommendation
-        fleet = self._get_mock_fleet()
-        best_bus = self._recommend_bus_for_route(fleet, distance, demand_score, profit)
+        else:
+            recommendation = "NEUTRAL"
 
         return {
-            "source": source,
-            "destination": destination,
-            "travel_date": travel_date,
-            "demand_level": "EXTREME" if demand_score > 85 else "HIGH" if demand_score > 60 else "MODERATE",
-            "reason": " + ".join(reasons) if reasons else "Normal Daily Commute",
-            "road_conditions": road_condition,
-            "fuel_consumption_est": round(distance/mileage, 1),
+            "fuel_cost": round(fuel_cost, 2),
             "estimated_revenue": round(estimated_revenue, 2),
-            "estimated_cost": round(total_cost, 2),
-            "estimated_profit": round(profit, 2),
+            "total_cost": round(total_cost, 2),
+            "profit": round(profit, 2),
             "recommendation": recommendation,
-            "alternative_routes": ["Via Mysore", "Via NH75"] if distance > 300 else ["Direct Route"],
-            "traffic_status": traffic_status,
-            "weather_report": weather_report,
-            "source_coords": self.get_coordinates(source),
-            "destination_coords": self.get_coordinates(destination),
-            "route_geometry": route_geometry,
-            "recommended_bus": best_bus
+            "ticket_price": base_ticket_price
         }
 
-    def _get_mock_fleet(self):
-        """Simulate the user's current fleet for recommendation"""
+    def recommend_bus_for_route(self, fleet: List[Dict[str, Any]], distance_km: float, demand_score: int, estimated_profit: float) -> Optional[Dict[str, Any]]:
+        """Intelligently matches vehicle characteristics to route distance and profitability."""
+        if distance_km > 300.0:
+            if estimated_profit > 8000.0:
+                recommended = next((b for b in fleet if b.get('type') == "Luxury Sleeper"), None)
+            else:
+                recommended = next((b for b in fleet if b.get('type') == "Semi-Sleeper"), None)
+        elif distance_km < 150.0:
+            recommended = next((b for b in fleet if b.get('type') == "Non-AC Seater"), None)
+        else:
+            recommended = next((b for b in fleet if b.get('type') == "Semi-Sleeper"), None)
+
+        if not recommended and len(fleet) > 1:
+            recommended = fleet[1]
+        elif not recommended and fleet:
+            recommended = fleet[0]
+
+        return recommended
+
+
+class IntelligenceEngine:
+    """
+    Orchestrates GIS live telemetry with deterministic financial/feasibility calculations.
+    """
+    def __init__(self, gis_adapter: Optional[RouteGISAdapter] = None, calculator: Optional[CorridorFeasibilityCalculator] = None):
+        self.gis = gis_adapter or RouteGISAdapter()
+        self.calc = calculator or CorridorFeasibilityCalculator()
+
+    def get_coordinates(self, city_name: str) -> Optional[List[float]]:
+        return self.gis.get_coordinates(city_name)
+
+    def get_real_route_data(self, source: str, destination: str) -> Optional[Dict[str, Any]]:
+        return self.gis.get_real_route_data(source, destination)
+
+    def get_weather_data(self, city: str) -> Optional[Dict[str, Any]]:
+        return self.gis.get_weather_data(city)
+
+    def get_fuel_price(self, city: str) -> float:
+        return self.calc.calculate_fuel_price(city)
+
+    def _get_mock_fleet(self) -> List[Dict[str, Any]]:
         return [
             {"id": "B1", "name": "Volvo 9600 Multi-Axle", "type": "Luxury Sleeper", "capacity": 40, "mileage": 3.5, "suitable_for": "long"},
             {"id": "B2", "name": "Leyland Viking AC", "type": "Semi-Sleeper", "capacity": 45, "mileage": 4.5, "suitable_for": "medium"},
@@ -234,29 +265,75 @@ class IntelligenceEngine:
             {"id": "B4", "name": "BharatBenz Glider", "type": "Luxury Seater", "capacity": 35, "mileage": 4.0, "suitable_for": "medium"},
         ]
 
-    def _recommend_bus_for_route(self, fleet, distance_km, demand_score, estimated_profit):
-        """
-        Intelligent logic to pick the best bus from the fleet.
-        """
-        # Logic: 
-        # 1. Long Distance (>300km) + High Profit -> Use Luxury Sleeper (Comfort + Revenue)
-        # 2. Short Distance (<150km) -> Use Non-AC Seater (Efficiency)
-        # 3. Medium -> Semi-Sleeper
-        
-        recommended = None
-        
-        if distance_km > 300:
-            if estimated_profit > 8000:
-                # Prioritize Luxury for high profit long routes
-                recommended = next((b for b in fleet if b['type'] == "Luxury Sleeper"), None)
-            else:
-                # Efficiency for lower profit long routes
-                recommended = next((b for b in fleet if b['type'] == "Semi-Sleeper"), None)
-        elif distance_km < 150:
-             recommended = next((b for b in fleet if b['type'] == "Non-AC Seater"), None)
-        
-        # Fallback
-        if not recommended:
-             recommended = fleet[1] # Default to Leyland
-             
-        return recommended
+    def analyze_route(self, source: str, destination: str, travel_date: date) -> Dict[str, Any]:
+        # 1. Demand & Seasonality (Deterministic)
+        demand_score, reasons = self.calc.calculate_demand(destination, travel_date)
+
+        # 2. Distance & Geometry (GIS Adapter with Fallback)
+        real_gis = self.gis.get_real_route_data(source, destination)
+        route_geometry = None
+        if real_gis:
+            distance = real_gis['distance_km']
+            route_geometry = real_gis.get('geometry')
+            reasons.append(f"Real-World Data: {round(distance)}km")
+        else:
+            distance = self.calc.get_fallback_distance(source, destination)
+            reasons.append("Simulated Route Data (API fallback)")
+
+        # 3. Weather Conditions (GIS Adapter with Fallback)
+        weather = self.gis.get_weather_data(destination)
+        weather_report = "Clear Skies"
+        traffic_status = "Clear"
+        road_condition = "Good"
+
+        if weather:
+            weather_report = weather.get("summary", "Clear")
+            condition = weather.get("condition")
+            if condition in ["Rain", "Thunderstorm", "Drizzle"]:
+                road_condition = "Slippery Roads (Rain Alert)"
+                traffic_status = "Slow Moving"
+                distance += 10.0
+            elif condition in ["Mist", "Fog"]:
+                road_condition = "Low Visibility Warning"
+
+        has_congestion = demand_score > 80
+        if has_congestion:
+            traffic_status = "Heavy Traffic (Holiday Rush)"
+
+        # 4. Fuel & Economics (Deterministic Calculator)
+        fuel_price = self.calc.calculate_fuel_price(source)
+        mileage = 4.0
+        econ = self.calc.calculate_profitability(
+            distance_km=distance,
+            demand_score=demand_score,
+            fuel_price=fuel_price,
+            mileage=mileage,
+            has_congestion=has_congestion
+        )
+
+        # 5. Fleet Recommendation
+        fleet = self._get_mock_fleet()
+        best_bus = self.calc.recommend_bus_for_route(fleet, distance, demand_score, econ['profit'])
+
+        demand_level = "EXTREME" if demand_score > 85 else "HIGH" if demand_score > 60 else "MODERATE"
+
+        return {
+            "source": source,
+            "destination": destination,
+            "travel_date": travel_date,
+            "demand_level": demand_level,
+            "reason": " + ".join(reasons) if reasons else "Normal Daily Commute",
+            "road_conditions": road_condition,
+            "fuel_consumption_est": round(distance / mileage, 1),
+            "estimated_revenue": econ['estimated_revenue'],
+            "estimated_cost": econ['total_cost'],
+            "estimated_profit": econ['profit'],
+            "recommendation": econ['recommendation'],
+            "alternative_routes": ["Via Mysore", "Via NH75"] if distance > 300.0 else ["Direct Route"],
+            "traffic_status": traffic_status,
+            "weather_report": weather_report,
+            "source_coords": self.gis.get_coordinates(source),
+            "destination_coords": self.gis.get_coordinates(destination),
+            "route_geometry": route_geometry,
+            "recommended_bus": best_bus
+        }

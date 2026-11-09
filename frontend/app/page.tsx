@@ -7,6 +7,7 @@ import RouteAnalyzer from '../components/RouteAnalyzer';
 import FleetGrid from '../components/FleetGrid';
 import ActiveTrips from '../components/ActiveTrips';
 import TripAssignmentModal from '../components/TripAssignmentModal';
+import { apiUrl } from '../lib/api';
 
 export default function Home() {
     return (
@@ -55,9 +56,9 @@ function DashboardContent() {
         setLoadingStats(true);
         try {
             const [fStatsRes, tripsRes, cStatsRes] = await Promise.all([
-                fetch('http://localhost:8000/api/fleet/stats'),
-                fetch('http://localhost:8000/api/trips/active'),
-                fetch('http://localhost:8000/api/employees/stats')
+                fetch(apiUrl('/api/fleet/stats')),
+                fetch(apiUrl('/api/trips/active')),
+                fetch(apiUrl('/api/employees/stats'))
             ]);
 
             if (fStatsRes.ok) setFleetStats(await fStatsRes.json());

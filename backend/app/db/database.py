@@ -3,15 +3,46 @@ import os
 import json
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional, Any
+from contextlib import contextmanager
 
-DB_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "mefleet.db")
+try:
+    from ..core.config import settings
+    DB_FILE = settings.DATABASE_PATH
+    BUSY_TIMEOUT_MS = settings.SQLITE_BUSY_TIMEOUT_MS
+except Exception:
+    DB_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "mefleet.db")
+    BUSY_TIMEOUT_MS = 5000
 
 def get_db_connection() -> sqlite3.Connection:
-    """Returns a SQLite connection with dict-like row access and foreign keys enabled."""
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    """
+    Returns a SQLite connection configured for high-concurrency enterprise use:
+    - Dict-like row access (sqlite3.Row)
+    - Foreign keys enforced
+    - Write-Ahead Logging (WAL) enabled for concurrent reads while writing
+    - Busy timeout set to 5000ms to eliminate 'database is locked' errors
+    """
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False, timeout=10.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS};")
     return conn
+
+@contextmanager
+def immediate_transaction(conn: sqlite3.Connection):
+    """
+    Context manager for SQLite immediate transactions (BEGIN IMMEDIATE).
+    Acquires an immediate reserved write lock to prevent TOCTOU race conditions 
+    during dispatch, assignment, and status updates.
+    """
+    cursor = conn.cursor()
+    cursor.execute("BEGIN IMMEDIATE;")
+    try:
+        yield cursor
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 def init_db():
     """Initializes database schema and populates seed data if empty."""
@@ -19,6 +50,20 @@ def init_db():
     cursor = conn.cursor()
 
     cursor.executescript("""
+    CREATE TABLE IF NOT EXISTS buses (
+        id TEXT PRIMARY KEY,
+        plate_number TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL,
+        capacity INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Available' CHECK(status IN ('Available', 'On Route', 'Maintenance')),
+        assigned_route TEXT,
+        assigned_date TEXT,
+        assigned_driver_id TEXT,
+        assigned_helper_ids TEXT,
+        last_maintenance_date TEXT,
+        created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS employees (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
@@ -57,7 +102,8 @@ def init_db():
         verified_by TEXT,
         notes TEXT,
         created_at TEXT NOT NULL,
-        FOREIGN KEY(driver_id) REFERENCES employees(id)
+        FOREIGN KEY(driver_id) REFERENCES employees(id),
+        FOREIGN KEY(bus_id) REFERENCES buses(id)
     );
 
     CREATE TABLE IF NOT EXISTS employee_locations (
@@ -98,10 +144,33 @@ def init_db():
     );
     """)
 
-    # Seed employees if table is empty
+    now_str = datetime.now().isoformat()
+
+    # Seed buses if empty
+    cursor.execute("SELECT COUNT(*) FROM buses")
+    if cursor.fetchone()[0] == 0:
+        initial_buses = [
+            ("B1", "KA-19-AB-1234", "Multi-Axle Volvo", 40, "Available", None, None, None, None, "2025-12-15", now_str),
+            ("B2", "KA-01-F-9999", "Non-AC Seater", 50, "Available", None, None, None, None, "2025-11-20", now_str),
+            ("B3", "KA-51-Z-5678", "Sleeper AC", 30, "Maintenance", None, None, None, None, "2026-01-10", now_str),
+            ("B4", "KA-19-XY-4567", "Semi-Sleeper", 45, "Available", None, None, None, None, "2025-10-05", now_str),
+        ]
+        cursor.executemany("""
+        INSERT INTO buses (
+            id, plate_number, type, capacity, status,
+            assigned_route, assigned_date, assigned_driver_id,
+            assigned_helper_ids, last_maintenance_date, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, initial_buses)
+
+        cursor.execute("""
+        INSERT INTO audit_logs (timestamp, action, entity_type, entity_id, user_role, details, company_id)
+        VALUES (?, 'INITIAL_SEED_FLEET', 'SYSTEM', 'SYSTEM', 'Administrator', 'Seeded initial MeFleet vehicle fleet into SQLite', 'CMP-001')
+        """, (now_str,))
+
+    # Seed employees if empty
     cursor.execute("SELECT COUNT(*) FROM employees")
     if cursor.fetchone()[0] == 0:
-        now_str = datetime.now().isoformat()
         initial_employees = [
             # Drivers
             ("E1", "Ramesh Kumar", "Driver", "+91 9876543210", "ramesh.k@mefleet.com", "KA04-2018-00912", "Heavy Commercial Vehicle (HCV)", "2028-05-14", 1, "Bangalore", "Available", "2022-03-15", 340.0, 10.0, 8.0, None, None, "CMP-001", now_str),
@@ -138,7 +207,7 @@ def init_db():
         # Initial audit log
         cursor.execute("""
         INSERT INTO audit_logs (timestamp, action, entity_type, entity_id, user_role, details, company_id)
-        VALUES (?, 'INITIAL_SEED', 'SYSTEM', 'SYSTEM', 'Administrator', 'Seeded initial MeFleet driver and helper database', 'CMP-001')
+        VALUES (?, 'INITIAL_SEED_EMPLOYEES', 'SYSTEM', 'SYSTEM', 'Administrator', 'Seeded initial MeFleet driver and helper database', 'CMP-001')
         """, (now_str,))
 
     conn.commit()
@@ -146,4 +215,3 @@ def init_db():
 
 # Auto-initialize database on import
 init_db()
-

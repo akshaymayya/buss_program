@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { apiUrl } from '../lib/api';
 
 interface TripAssignmentModalProps {
     isOpen: boolean;
@@ -55,7 +56,7 @@ const TripAssignmentModal: React.FC<TripAssignmentModalProps> = ({ isOpen, onClo
 
     const fetchBuses = async () => {
         try {
-            const res = await fetch('http://localhost:8000/api/fleet/');
+            const res = await fetch(apiUrl('/api/fleet/'));
             if (res.ok) {
                 const fleet = await res.json();
                 setBuses(fleet);
@@ -72,7 +73,7 @@ const TripAssignmentModal: React.FC<TripAssignmentModalProps> = ({ isOpen, onClo
     const fetchSmartRecommendations = async () => {
         setFetchingRecs(true);
         try {
-            const res = await fetch('http://localhost:8000/api/employees/smart-recommendations', {
+            const res = await fetch(apiUrl('/api/employees/smart-recommendations'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -110,7 +111,7 @@ const TripAssignmentModal: React.FC<TripAssignmentModalProps> = ({ isOpen, onClo
 
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/api/employees/assign', {
+            const res = await fetch(apiUrl('/api/employees/assign'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
