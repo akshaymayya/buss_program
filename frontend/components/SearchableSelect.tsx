@@ -41,26 +41,26 @@ const SearchableSelect = ({ options, value, onChange, placeholder, label, exclud
 
     return (
         <div className="relative" ref={wrapperRef}>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">{label}</label>
 
             <div
-                className="w-full p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500 bg-white cursor-pointer relative flex items-center justify-between"
+                className="w-full px-3 py-2 border border-gray-200 rounded-md focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-600 bg-white cursor-pointer relative flex items-center justify-between text-sm transition"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span className={value ? 'text-gray-900' : 'text-gray-400'}>
+                <span className={value ? 'text-gray-900 font-medium' : 'text-gray-400'}>
                     {value || placeholder || "Select..."}
                 </span>
-                <svg className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 9l-7 7-7-7" />
                 </svg>
             </div>
 
             {isOpen && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-hidden flex flex-col">
-                    <div className="p-2 border-b border-gray-100 bg-gray-50 sticky top-0">
+                <div className="absolute z-50 w-full mt-1.5 bg-white border border-gray-200 rounded-md shadow-lg shadow-black/5 max-h-60 overflow-hidden flex flex-col">
+                    <div className="p-2 border-b border-gray-100 bg-gray-50/70 sticky top-0">
                         <input
                             type="text"
-                            className="w-full p-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:border-indigo-500"
+                            className="w-full px-2.5 py-1.5 text-xs border border-gray-200 rounded focus:outline-none focus:border-emerald-600 bg-white text-gray-900 placeholder:text-gray-400"
                             placeholder="Type to search city..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
@@ -69,19 +69,23 @@ const SearchableSelect = ({ options, value, onChange, placeholder, label, exclud
                         />
                     </div>
 
-                    <div className="overflow-y-auto max-h-48">
+                    <div className="overflow-y-auto max-h-48 divide-y divide-gray-50">
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map((option) => (
                                 <div
                                     key={option}
-                                    className={`px-4 py-2 cursor-pointer hover:bg-indigo-50 text-sm ${option === value ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-gray-700'}`}
+                                    className={`px-3 py-2 cursor-pointer text-xs transition ${
+                                        option === value
+                                            ? 'bg-emerald-50 text-emerald-900 font-medium'
+                                            : 'text-gray-700 hover:bg-gray-50'
+                                    }`}
                                     onClick={() => handleSelect(option)}
                                 >
                                     {option}
                                 </div>
                             ))
                         ) : (
-                            <div className="px-4 py-3 text-sm text-gray-500 text-center">No cities found</div>
+                            <div className="px-4 py-3 text-xs text-gray-400 text-center">No locations found</div>
                         )}
                     </div>
                 </div>

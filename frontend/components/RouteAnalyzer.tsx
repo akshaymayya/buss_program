@@ -35,7 +35,7 @@ interface AnalysisResult {
 const RouteAnalyzer = () => {
     const [source, setSource] = useState('Bangalore');
     const [destination, setDestination] = useState('Mysore');
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [loading, setLoading] = useState(false);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
@@ -43,23 +43,26 @@ const RouteAnalyzer = () => {
     // Dynamic import for Leaflet map to avoid SSR issues
     const LiveMap = dynamic(() => import('./LiveMap'), {
         ssr: false,
-        loading: () => <div className="h-64 flex items-center justify-center bg-gray-100 rounded-xl">Loading Map...</div>
+        loading: () => (
+            <div className="h-72 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-400 font-mono">
+                Loading highway telemetry map...
+            </div>
+        )
     });
 
-    // Ensure destination is never the same as source
     React.useEffect(() => {
         if (source === destination) {
-            setDestination(''); // Reset destination if it conflicts
+            setDestination('');
         }
     }, [source, destination]);
 
     const handleAnalyze = async () => {
         if (!source || !destination) {
-            alert("Please select both Source and Destination cities.");
+            alert("Please select both origin and destination cities.");
             return;
         }
         if (source === destination) {
-            alert("Source and Destination cannot be the same!");
+            alert("Origin and destination cannot be identical.");
             return;
         }
         setLoading(true);
@@ -84,22 +87,27 @@ const RouteAnalyzer = () => {
     };
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-800 mb-4 px-2 border-l-4 border-indigo-600">Route Intelligence Engine</h2>
+        <div className="bg-white p-6 rounded-xl border border-gray-200/90 shadow-xs">
+            <div className="mb-5">
+                <h2 className="text-base font-semibold text-gray-900 tracking-tight">Corridor evaluation</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                    Select departure hub and terminal to compute expected revenue, road state and fuel burn
+                </p>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                     <SearchableSelect
-                        label="Source City"
+                        label="Origin hub"
                         options={INDIAN_CITIES}
                         value={source}
                         onChange={setSource}
-                        placeholder="Search start point..."
+                        placeholder="Search origin..."
                     />
                 </div>
                 <div>
                     <SearchableSelect
-                        label="Destination City"
+                        label="Destination hub"
                         options={INDIAN_CITIES}
                         value={destination}
                         onChange={setDestination}
@@ -108,12 +116,12 @@ const RouteAnalyzer = () => {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date of Travel</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Travel date</label>
                     <input
                         type="date"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none h-[42px]"
+                        className="w-full px-3 py-2 text-xs border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 h-[38px]"
                     />
                 </div>
             </div>
@@ -121,75 +129,95 @@ const RouteAnalyzer = () => {
             <button
                 onClick={handleAnalyze}
                 disabled={loading}
-                className={`w-full py-3 rounded-lg font-semibold text-white transition-all ${loading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-lg'}`}
+                className={`w-full py-2.5 px-4 rounded-lg text-xs font-semibold text-white transition-colors cursor-pointer ${loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-xs'
+                    }`}
             >
-                {loading ? 'Analyzing Real-Time Data...' : 'Analyze Route Profitability'}
+                {loading ? 'Evaluating road telemetry and pricing...' : 'Calculate corridor feasibility'}
             </button>
 
             {result && (
-                <div className="mt-8 animate-fade-in-up">
-                    <div className={`p-4 rounded-lg mb-6 text-center ${result.recommendation.includes('HIGHLY')
-                        ? 'bg-green-50 border-green-200 text-green-800'
-                        : result.recommendation.includes('AVOID')
-                            ? 'bg-red-50 border-red-200 text-red-800'
-                            : 'bg-yellow-50 border-yellow-200 text-yellow-800'
-                        }`}>
-                        <h3 className="text-2xl font-bold">{result.recommendation}</h3>
-                        <p className="mt-1 opacity-80">{result.reason}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <ResultCard label="Estimated Profit" value={`₹${result.estimated_profit.toLocaleString()}`} valueColor="text-green-600" />
-                        <ResultCard label="Fuel Cost" value={`₹${result.estimated_cost.toLocaleString()}`} />
-                        <ResultCard label="Demand Level" value={result.demand_level} valueColor={result.demand_level === 'EXTREME' ? 'text-purple-600' : 'text-gray-800'} />
-                        <ResultCard label="Traffic Status" value={result.traffic_status} />
-                        <ResultCard label="Weather Alert" value={result.weather_report || "Clear"} valueColor="text-blue-500" />
-                    </div>
-
-                    {/* Smart Fleet Recommendation */}
-                    {result.recommended_bus && (
-                        <div className="mt-6 p-4 bg-indigo-50 border border-indigo-100 rounded-lg flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="mt-6 pt-6 border-t border-gray-100 space-y-5">
+                    {/* Quiet Recommendation Summary */}
+                    <div className="p-3.5 rounded-lg bg-gray-50 border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-600" />
                             <div>
-                                <h4 className="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1">Recommended Fleet Vehicle</h4>
-                                <p className="text-lg font-bold text-indigo-900">{result.recommended_bus.name}</p>
-                                <p className="text-sm text-indigo-700">{result.recommended_bus.type} • {result.recommended_bus.capacity} Seats</p>
+                                <span className="text-xs font-semibold text-gray-900">
+                                    {result.recommendation === "HIGHLY RECOMMENDED" ? "High profitability window" : result.recommendation}
+                                </span>
+                                <span className="text-xs text-gray-500 block sm:inline sm:ml-2">
+                                    {result.reason}
+                                </span>
                             </div>
-                            <div className="flex gap-3">
-                                <div className="hidden md:block">
-                                    <span className="px-4 py-2 bg-white text-indigo-600 font-semibold rounded-full text-sm shadow-sm">
-                                        Best Match
-                                    </span>
+                        </div>
+                        <span className="text-[11px] font-mono text-gray-500 self-start sm:self-auto">
+                            Demand: {result.demand_level.toLowerCase()}
+                        </span>
+                    </div>
+
+                    {/* Telemetry Metric Cards (Reddit style with subtle vertical dividers) */}
+                    <div className="bg-gray-50/60 border border-gray-200/80 rounded-xl p-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-gray-200/70 gap-4 sm:gap-0">
+                            <div className="sm:px-4 first:pl-0">
+                                <span className="text-[11px] font-semibold text-gray-500 block">Est. net profit</span>
+                                <span className="text-xl font-bold text-emerald-700 font-mono tabular-nums mt-0.5 block">
+                                    ₹{Math.round(result.estimated_profit).toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-mono mt-0.5 block">After tolls & diesel</span>
+                            </div>
+                            <div className="sm:px-4 pt-4 sm:pt-0">
+                                <span className="text-[11px] font-semibold text-gray-500 block">Operating cost</span>
+                                <span className="text-xl font-bold text-gray-900 font-mono tabular-nums mt-0.5 block">
+                                    ₹{Math.round(result.estimated_cost).toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-mono mt-0.5 block">Fuel & tyre wear</span>
+                            </div>
+                            <div className="sm:px-4 pt-4 sm:pt-0">
+                                <span className="text-[11px] font-semibold text-gray-500 block">Diesel burn</span>
+                                <span className="text-xl font-bold text-gray-900 font-mono tabular-nums mt-0.5 block">
+                                    {result.fuel_consumption_est} L
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-mono mt-0.5 block">Highway average</span>
+                            </div>
+                            <div className="sm:px-4 pt-4 sm:pt-0 last:pr-0">
+                                <span className="text-[11px] font-semibold text-gray-500 block">Road status</span>
+                                <span className="text-sm font-bold text-gray-900 mt-0.5 block truncate">
+                                    {result.traffic_status}
+                                </span>
+                                <span className="text-[10px] text-gray-400 mt-0.5 block truncate">
+                                    {result.weather_report || "Clear conditions"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Recommended Fleet Vehicle */}
+                    {result.recommended_bus && (
+                        <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <span className="text-[11px] font-medium text-emerald-700 font-mono block">
+                                    Suggested fleet assignment
+                                </span>
+                                <div className="flex items-baseline gap-2 mt-0.5">
+                                    <span className="font-semibold text-sm text-gray-900">{result.recommended_bus.name}</span>
+                                    <span className="text-xs text-gray-500">· {result.recommended_bus.type}</span>
+                                    <span className="text-xs text-gray-500 font-mono">({result.recommended_bus.capacity} seats)</span>
                                 </div>
-                                <button
-                                    onClick={() => setShowAssignmentModal(true)}
-                                    className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-md animate-pulse"
-                                >
-                                    Start Route Operation &rarr;
-                                </button>
                             </div>
+
+                            <button
+                                onClick={() => setShowAssignmentModal(true)}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-xs transition-colors cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                            >
+                                Assign crew and dispatch →
+                            </button>
                         </div>
                     )}
 
-                    <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                        <h4 className="font-semibold text-gray-700 mb-2">Detailed Insights</h4>
-                        <ul className="space-y-2 text-sm text-gray-600">
-                            <li className="flex justify-between">
-                                <span>Road Conditions:</span>
-                                <span className="font-medium text-gray-900">{result.road_conditions}</span>
-                            </li>
-                            <li className="flex justify-between">
-                                <span>Alternative Routes:</span>
-                                <span className="font-medium text-gray-900">{result.alternative_routes.join(", ")}</span>
-                            </li>
-                            <li className="flex justify-between">
-                                <span>Est. Fuel Consumption:</span>
-                                <span className="font-medium text-gray-900">{result.fuel_consumption_est} Liters</span>
-                            </li>
-                        </ul>
-                    </div>
-
-                    {/* Map Section */}
-                    <div className="mt-8 h-96 w-full relative z-0">
+                    {/* Telemetry Geometry Map */}
+                    <div className="mt-4 rounded-lg overflow-hidden border border-gray-200 h-72 w-full relative z-0">
                         <LiveMap
                             sourceCoords={result.source_coords}
                             destCoords={result.destination_coords}
@@ -212,12 +240,5 @@ const RouteAnalyzer = () => {
         </div>
     );
 };
-
-const ResultCard = ({ label, value, valueColor = "text-gray-900" }: { label: string, value: string | number, valueColor?: string }) => (
-    <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 flex flex-col items-center justify-center">
-        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
-        <span className={`text-xl font-bold mt-1 ${valueColor}`}>{value}</span>
-    </div>
-);
 
 export default RouteAnalyzer;

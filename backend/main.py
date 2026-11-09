@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import routes, fleet, employees
+from app.routers import routes, fleet, employees, trips
 
 app = FastAPI(
     title="Fleet Management Intelligence API",
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(routes.router, prefix="/api/routes", tags=["Routes"])
 app.include_router(fleet.router, prefix="/api/fleet", tags=["Fleet"])
 app.include_router(employees.router, prefix="/api/employees", tags=["Employees"])
+app.include_router(trips.router, prefix="/api/trips", tags=["Trips"])
 
 @app.get("/")
 def read_root():

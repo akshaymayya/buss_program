@@ -48,7 +48,7 @@ const LiveMap = ({ sourceCoords, destCoords, routeGeometry }: LiveMapProps) => {
     }, [sourceCoords, destCoords]);
 
     return (
-        <div className="h-full w-full rounded-xl overflow-hidden shadow-sm border border-gray-100 z-0">
+        <div className="h-full w-full rounded-lg overflow-hidden border border-gray-200 z-0">
             <MapContainer center={defaultCenter} zoom={7} style={{ height: '100%', width: '100%' }}>
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -57,20 +57,24 @@ const LiveMap = ({ sourceCoords, destCoords, routeGeometry }: LiveMapProps) => {
 
                 {sourceCoords && (
                     <Marker position={[sourceCoords[1], sourceCoords[0]]} icon={icon}>
-                        <Popup>Source Location</Popup>
+                        <Popup>
+                            <span className="font-sans text-xs font-semibold">Origin terminal</span>
+                        </Popup>
                     </Marker>
                 )}
 
                 {destCoords && (
                     <Marker position={[destCoords[1], destCoords[0]]} icon={icon}>
-                        <Popup>Destination Location</Popup>
+                        <Popup>
+                            <span className="font-sans text-xs font-semibold">Destination terminal</span>
+                        </Popup>
                     </Marker>
                 )}
 
                 {routeGeometry && (
                     <Polyline
                         positions={routeGeometry.map(coord => [coord[1], coord[0]] as [number, number])}
-                        pathOptions={{ color: 'blue', weight: 5, opacity: 0.7 }}
+                        pathOptions={{ color: '#059669', weight: 4, opacity: 0.85 }}
                     />
                 )}
 

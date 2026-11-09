@@ -48,7 +48,7 @@ const FleetGrid = () => {
     };
 
     const handleCancelTrip = async (busId: string) => {
-        if (!confirm("Cancel this trip? The bus will become available.")) return;
+        if (!confirm("Cancel this trip? The vehicle will be released to available status.")) return;
         setActionLoading(busId);
         try {
             const res = await fetch(`http://localhost:8000/api/fleet/${busId}/cancel-trip`, {
@@ -68,7 +68,7 @@ const FleetGrid = () => {
     };
 
     const handleSendToMaintenance = async (busId: string) => {
-        if (!confirm("Send this bus to maintenance?")) return;
+        if (!confirm("Send this vehicle to maintenance depot?")) return;
         setActionLoading(busId);
         try {
             const res = await fetch(`http://localhost:8000/api/fleet/${busId}/maintenance`, {
@@ -102,62 +102,70 @@ const FleetGrid = () => {
     };
 
     const getStatusBadge = (status: string) => {
-        const styles: Record<string, string> = {
-            'Available': 'bg-emerald-100 text-emerald-700',
-            'On Route': 'bg-blue-100 text-blue-700',
-            'Maintenance': 'bg-amber-100 text-amber-700'
-        };
-        return styles[status] || 'bg-gray-100 text-gray-700';
+        switch (status) {
+            case 'Available':
+                return 'bg-emerald-50 text-emerald-800 border border-emerald-200/70';
+            case 'On Route':
+                return 'bg-blue-50 text-blue-800 border border-blue-200/70';
+            case 'Maintenance':
+                return 'bg-amber-50 text-amber-800 border border-amber-200/70';
+            default:
+                return 'bg-gray-50 text-gray-700 border border-gray-200';
+        }
     };
 
     if (loading) {
         return (
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
-                <div className="space-y-3">
-                    {[1, 2, 3].map(i => <div key={i} className="h-12 bg-gray-100 rounded"></div>)}
+            <div className="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
+                <div className="space-y-2">
+                    {[1, 2, 3].map(i => <div key={i} className="h-14 bg-gray-100 rounded-lg"></div>)}
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-5 rounded-xl border border-gray-200/90 shadow-xs">
             {/* Header */}
-            <div className="flex justify-between items-center mb-5">
-                <div className="flex items-center gap-2">
-                    <div className="w-1 h-6 bg-emerald-500 rounded-full"></div>
-                    <h2 className="text-lg font-bold text-gray-800">Fleet Status</h2>
+            <div className="flex justify-between items-baseline mb-4">
+                <div>
+                    <h2 className="text-sm font-semibold text-gray-900 tracking-tight">Fleet capacity</h2>
+                    <span className="text-[11px] text-gray-400 font-mono">Current vehicle readiness</span>
                 </div>
-                <a href="/management" className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
-                    Manage Fleet →
+                <a
+                    href="/management"
+                    className="text-xs font-medium text-emerald-700 hover:text-emerald-800 transition-colors"
+                >
+                    Manage fleet →
                 </a>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
-                <div className="p-3 bg-gray-50 rounded-lg text-center">
-                    <span className="block text-2xl font-bold text-gray-800">{stats?.total || 0}</span>
-                    <span className="text-xs text-gray-500 font-medium">Total</span>
+            {/* Stats Row (Reddit style with subtle vertical dividers) */}
+            <div className="grid grid-cols-3 divide-x divide-gray-150 py-3 mb-4 bg-gray-50/60 rounded-xl border border-gray-200/80">
+                <div className="px-4 text-center">
+                    <span className="block text-2xl font-bold text-gray-900 font-mono tabular-nums">{stats?.total || 0}</span>
+                    <span className="text-[11px] text-gray-500 font-medium">Total fleet</span>
                 </div>
-                <div className="p-3 bg-emerald-50 rounded-lg text-center">
-                    <span className="block text-2xl font-bold text-emerald-600">{stats?.available || 0}</span>
-                    <span className="text-xs text-gray-500 font-medium">Available</span>
+                <div className="px-4 text-center">
+                    <span className="block text-2xl font-bold text-emerald-700 font-mono tabular-nums">{stats?.available || 0}</span>
+                    <span className="text-[11px] text-gray-500 font-medium">Available</span>
                 </div>
-                <div className="p-3 bg-blue-50 rounded-lg text-center">
-                    <span className="block text-2xl font-bold text-blue-600">{stats?.on_route || 0}</span>
-                    <span className="text-xs text-gray-500 font-medium">On Route</span>
+                <div className="px-4 text-center">
+                    <span className="block text-2xl font-bold text-blue-700 font-mono tabular-nums">{stats?.on_route || 0}</span>
+                    <span className="text-[11px] text-gray-500 font-medium">In transit</span>
                 </div>
             </div>
 
             {/* Maintenance Warning */}
             {stats?.needs_service_warning && stats.needs_service_warning.length > 0 && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <p className="text-xs font-bold text-amber-700 mb-1">⚠️ Maintenance Alert</p>
+                <div className="mb-4 p-3 bg-amber-50/80 border border-amber-200/80 rounded-lg text-xs text-amber-900 space-y-1">
+                    <span className="font-semibold block text-[11px]">Inspection due (30+ days)</span>
                     {stats.needs_service_warning.map(w => (
-                        <p key={w.id} className="text-xs text-amber-600">
-                            {w.plate} - {w.days_since} days since last service
-                        </p>
+                        <div key={w.id} className="text-[11px] text-amber-800 flex justify-between font-mono">
+                            <span>{w.plate}</span>
+                            <span>{w.days_since}d since service</span>
+                        </div>
                     ))}
                 </div>
             )}
@@ -167,55 +175,56 @@ const FleetGrid = () => {
                 {buses.map((bus) => (
                     <div
                         key={bus.id}
-                        className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors group"
+                        className="p-3 rounded-lg border border-gray-200/70 bg-gray-50/40 hover:bg-gray-50 transition-colors"
                     >
-                        <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-gray-900 text-sm truncate">{bus.plate_number}</p>
-                                <p className="text-xs text-gray-500">{bus.type} • {bus.capacity} seats</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusBadge(bus.status)}`}>
-                                    {bus.status}
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0">
+                                <span className="font-mono font-semibold text-xs text-gray-900 block truncate">
+                                    {bus.plate_number}
+                                </span>
+                                <span className="text-[11px] text-gray-500 block truncate">
+                                    {bus.type} · {bus.capacity} seats
                                 </span>
                             </div>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-semibold font-mono ${getStatusBadge(bus.status)}`}>
+                                {bus.status}
+                            </span>
                         </div>
 
-                        {/* Assignment Info */}
                         {bus.assigned_route && (
-                            <div className="mt-2 pt-2 border-t border-gray-200">
-                                <p className="text-xs text-blue-600 font-medium">📍 {bus.assigned_route}</p>
-                                <p className="text-xs text-gray-400">{bus.assigned_date}</p>
+                            <div className="mt-2 pt-2 border-t border-gray-200/50 flex items-center justify-between text-[11px]">
+                                <span className="text-gray-700 font-medium truncate">{bus.assigned_route}</span>
+                                <span className="text-gray-400 font-mono ml-2 shrink-0">{bus.assigned_date}</span>
                             </div>
                         )}
 
-                        {/* Action Buttons */}
-                        <div className="mt-2 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {/* Quiet Action Buttons */}
+                        <div className="mt-2.5 pt-2 border-t border-gray-200/40 flex justify-end gap-1.5">
                             {bus.status === 'On Route' && (
                                 <button
                                     onClick={() => handleCancelTrip(bus.id)}
                                     disabled={actionLoading === bus.id}
-                                    className="text-xs px-2 py-1 bg-red-100 text-red-600 rounded hover:bg-red-200 transition-colors"
+                                    className="text-[11px] px-2.5 py-1 text-gray-600 hover:text-red-700 hover:bg-red-50 rounded border border-gray-200 transition-colors cursor-pointer"
                                 >
-                                    {actionLoading === bus.id ? '...' : 'Cancel Trip'}
+                                    {actionLoading === bus.id ? 'Cancelling...' : 'Cancel trip'}
                                 </button>
                             )}
                             {bus.status === 'Available' && (
                                 <button
                                     onClick={() => handleSendToMaintenance(bus.id)}
                                     disabled={actionLoading === bus.id}
-                                    className="text-xs px-2 py-1 bg-amber-100 text-amber-600 rounded hover:bg-amber-200 transition-colors"
+                                    className="text-[11px] px-2.5 py-1 text-gray-600 hover:text-amber-800 hover:bg-amber-50 rounded border border-gray-200 transition-colors cursor-pointer"
                                 >
-                                    Send to Maintenance
+                                    Service check
                                 </button>
                             )}
                             {bus.status === 'Maintenance' && (
                                 <button
                                     onClick={() => handleCompleteMaintenance(bus.id)}
                                     disabled={actionLoading === bus.id}
-                                    className="text-xs px-2 py-1 bg-emerald-100 text-emerald-600 rounded hover:bg-emerald-200 transition-colors"
+                                    className="text-[11px] px-2.5 py-1 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors cursor-pointer font-medium"
                                 >
-                                    Mark Complete
+                                    Mark inspected
                                 </button>
                             )}
                         </div>

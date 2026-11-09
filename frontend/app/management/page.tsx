@@ -1,110 +1,217 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import RedditNavShell from '../../components/RedditNavShell';
 import FleetManager from '../../components/FleetManager';
 import OfficeManager from '../../components/OfficeManager';
 import DigitalPresence from '../../components/DigitalPresence';
+import DriverHelperManager from '../../components/DriverHelperManager';
+import SmartTripAssignmentDashboard from '../../components/SmartTripAssignmentDashboard';
+import TripAssignmentModal from '../../components/TripAssignmentModal';
 
-const ManagementPage = () => {
-    const [activeTab, setActiveTab] = useState('fleet');
+export default function ManagementPageWrapper() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#f8f9fa] flex items-center justify-center font-mono text-xs text-gray-400">
+                Loading operations console...
+            </div>
+        }>
+            <ManagementPage />
+        </Suspense>
+    );
+}
+
+function ManagementPage() {
+    const searchParams = useSearchParams();
+    const initialTab = searchParams.get('tab') || 'crew';
+
+    const [activeTab, setActiveTab] = useState(initialTab);
     const [fleetCount, setFleetCount] = useState<number | null>(null);
+    const [crewCount, setCrewCount] = useState<number | null>(null);
+    const [quickDispatchOpen, setQuickDispatchOpen] = useState(false);
 
     useEffect(() => {
-        // Fetch fleet count for tab badge
+        const tab = searchParams.get('tab');
+        if (tab) setActiveTab(tab);
+    }, [searchParams]);
+
+    useEffect(() => {
+        fetchCounts();
+    }, []);
+
+    const fetchCounts = () => {
         fetch('http://localhost:8000/api/fleet/stats')
             .then(res => res.json())
             .then(data => setFleetCount(data.total))
             .catch(() => setFleetCount(null));
-    }, []);
+
+        fetch('http://localhost:8000/api/employees/stats')
+            .then(res => res.json())
+            .then(data => setCrewCount(data.total))
+            .catch(() => setCrewCount(null));
+    };
+
+    const getActiveNavId = () => {
+        switch (activeTab) {
+            case 'crew': return 'crew';
+            case 'dispatch': return 'smart-dispatch';
+            case 'fleet': return 'fleet-inventory';
+            case 'offices': return 'stations';
+            case 'digital': return 'digital';
+            case 'profile': return 'company';
+            default: return 'crew';
+        }
+    };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6 md:p-12">
-            <header className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <a href="/" className="inline-flex items-center text-sm text-gray-500 hover:text-indigo-600 mb-2 transition-colors">
-                        <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-                        Back to Dashboard
-                    </a>
-                    <h1 className="text-3xl font-bold text-gray-900">Business Hub</h1>
-                    <p className="text-gray-500 mt-1">Manage your fleet, offices, and digital presence.</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-                        Switch Account
-                    </button>
-                    <div className="h-10 w-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">
-                        AT
+        <RedditNavShell activeNav={getActiveNavId()} onQuickDispatch={() => setQuickDispatchOpen(true)}>
+            {/* Header section (Reddit style) */}
+            <div className="mb-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight">
+                            Operations Management
+                        </h1>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Dispatch allocation, driver & helper operational tracking, and regional hub infrastructure.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-start sm:self-auto font-mono text-xs text-gray-400">
+                        <span>Depot: Bangalore HQ</span>
+                        <span>·</span>
+                        <span className="text-emerald-700 font-semibold">CMP-001</span>
                     </div>
                 </div>
-            </header>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden min-h-[600px]">
-                <div className="border-b border-gray-100 flex overflow-x-auto">
-                    <TabButton
-                        label="My Fleet"
-                        isActive={activeTab === 'fleet'}
+                {/* Sub-navigation Underline Tabs (Exact Reddit style) */}
+                <div className="border-b border-gray-200 flex space-x-6 sm:space-x-8 text-sm overflow-x-auto pb-px">
+                    <button
+                        onClick={() => setActiveTab('crew')}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                            activeTab === 'crew'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        <span>Drivers & helpers</span>
+                        {crewCount !== null && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700">
+                                {crewCount}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('dispatch')}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                            activeTab === 'dispatch'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        <span>Smart trip assignment</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[9px] font-mono font-bold bg-blue-50 text-blue-700">
+                            AI
+                        </span>
+                    </button>
+                    <button
                         onClick={() => setActiveTab('fleet')}
-                        icon={<BusIcon />}
-                        count={fleetCount}
-                    />
-                    <TabButton
-                        label="Office Network"
-                        isActive={activeTab === 'offices'}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                            activeTab === 'fleet'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        <span>Fleet inventory</span>
+                        {fleetCount !== null && (
+                            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700">
+                                {fleetCount}
+                            </span>
+                        )}
+                    </button>
+                    <button
                         onClick={() => setActiveTab('offices')}
-                        icon={<BuildingIcon />}
-                        count={2}
-                    />
-                    <TabButton
-                        label="Digital Presence"
-                        isActive={activeTab === 'digital'}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                            activeTab === 'offices'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        <span>Station network</span>
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-gray-100 text-gray-700">
+                            4
+                        </span>
+                    </button>
+                    <button
                         onClick={() => setActiveTab('digital')}
-                        icon={<GlobeIcon />}
-                    />
-                    <TabButton
-                        label="Company Profile"
-                        isActive={activeTab === 'profile'}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                            activeTab === 'digital'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        <span>OTA channels</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    </button>
+                    <button
                         onClick={() => setActiveTab('profile')}
-                        icon={<UserIcon />}
-                    />
-                </div>
-
-                <div className="p-6 md:p-8">
-                    {activeTab === 'fleet' && <FleetManager />}
-
-                    {activeTab === 'offices' && <OfficeManager />}
-
-                    {activeTab === 'digital' && <DigitalPresence />}
-
-                    {activeTab === 'profile' && (
-                        <div className="text-center py-20">
-                            <h3 className="text-xl font-semibold text-gray-800">Company Profile</h3>
-                            <p className="text-gray-500 mt-2">Manage employee access and company details.</p>
-                        </div>
-                    )}
+                        className={`pb-3 font-semibold transition relative whitespace-nowrap cursor-pointer ${
+                            activeTab === 'profile'
+                                ? 'text-gray-900 border-b-2 border-emerald-600'
+                                : 'text-gray-500 hover:text-gray-900'
+                        }`}
+                    >
+                        Company profile
+                    </button>
                 </div>
             </div>
-        </div>
+
+            {/* Main Content Pane */}
+            <div className="bg-white rounded-xl border border-gray-200/90 shadow-xs p-5 sm:p-6">
+                {activeTab === 'crew' && <DriverHelperManager />}
+
+                {activeTab === 'dispatch' && (
+                    <SmartTripAssignmentDashboard onAssignmentSuccess={fetchCounts} />
+                )}
+
+                {activeTab === 'fleet' && <FleetManager />}
+
+                {activeTab === 'offices' && <OfficeManager />}
+
+                {activeTab === 'digital' && <DigitalPresence />}
+
+                {activeTab === 'profile' && (
+                    <div className="py-16 text-center max-w-sm mx-auto space-y-3">
+                        <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center font-mono font-bold text-sm text-emerald-800 mx-auto">
+                            MF
+                        </div>
+                        <h3 className="font-bold text-sm text-gray-900">MeFleet Operations Tenant</h3>
+                        <p className="text-xs text-gray-500 leading-relaxed">
+                            Company ID CMP-001 (Akshat Travels) with active multi-station dispatch isolation, verified rest logs, and authorized staff audit trails.
+                        </p>
+                        <div className="pt-2 flex justify-center gap-2 text-xs font-mono text-gray-400">
+                            <span>Corridor sync: Online</span>
+                            <span>·</span>
+                            <span>GPS Telemetry: Active</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Quick Dispatch Modal */}
+            <TripAssignmentModal
+                isOpen={quickDispatchOpen}
+                onClose={() => {
+                    setQuickDispatchOpen(false);
+                    fetchCounts();
+                }}
+                routeDetails={{
+                    source: "Bangalore",
+                    destination: "Mysore",
+                    date: new Date().toISOString().split('T')[0]
+                }}
+            />
+        </RedditNavShell>
     );
-};
-
-const TabButton = ({ label, isActive, onClick, icon, count }: any) => (
-    <button
-        onClick={onClick}
-        className={`px-6 py-4 flex items-center gap-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${isActive
-            ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50'
-            : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-    >
-        {icon}
-        {label}
-        {count && <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>{count}</span>}
-    </button>
-);
-
-// Icons (Simple SVG placeholders)
-const BusIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>;
-const BuildingIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>;
-const GlobeIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg>;
-const UserIcon = () => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>;
-
-export default ManagementPage;
+}

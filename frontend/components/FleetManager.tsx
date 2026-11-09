@@ -91,91 +91,123 @@ const FleetManager = () => {
 
 
     return (
-        <div>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-800">My Fleet ({fleet.length})</h2>
+        <div className="space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-gray-900">Registered fleet</h2>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono tabular-nums bg-gray-100 text-gray-700">
+                        {fleet.length}
+                    </span>
+                </div>
                 <button
                     onClick={() => setShowAddForm(true)}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-xs font-medium transition shadow-sm"
                 >
-                    + Add New Bus
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add vehicle
                 </button>
             </div>
 
             {showAddForm && (
-                <div className="mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 animate-fade-in-up">
-                    <h3 className="font-semibold text-gray-800 mb-4">Add New Vehicle</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <input
-                            type="text"
-                            placeholder="Plate Number (e.g. KA-01-AB-1234)"
-                            className="p-2 border border-gray-300 text-gray-900 rounded-lg placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none"
-                            value={newBus.plate_number}
-                            onChange={e => setNewBus({ ...newBus, plate_number: e.target.value })}
-                        />
-                        <select
-                            className="p-2 border border-gray-300 text-gray-900 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                            value={newBus.type}
-                            onChange={e => setNewBus({ ...newBus, type: e.target.value })}
-                        >
-                            <option>Standard</option>
-                            <option>Sleeper AC</option>
-                            <option>Semi-Sleeper</option>
-                            <option>Multi-Axle Volvo</option>
-                            <option>Mercedes Benz</option>
-                        </select>
-                        <input
-                            type="number"
-                            placeholder="Capacity"
-                            className="p-2 border border-gray-300 text-gray-900 rounded-lg placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 outline-none"
-                            value={newBus.capacity}
-                            onChange={e => setNewBus({ ...newBus, capacity: parseInt(e.target.value) })}
-                        />
-                        <div className="flex gap-2">
-                            <button onClick={handleAddBus} className="flex-1 bg-green-600 text-white rounded-lg hover:bg-green-700">Save</button>
-                            <button onClick={() => setShowAddForm(false)} className="px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Cancel</button>
+                <div className="p-4 bg-gray-50/70 rounded-lg border border-gray-200">
+                    <h3 className="text-xs font-semibold text-gray-900 mb-3">Add new vehicle</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-1">Plate number</label>
+                            <input
+                                type="text"
+                                placeholder="KA-01-AB-1234"
+                                className="w-full px-2.5 py-1.5 border border-gray-200 text-gray-900 font-mono text-xs rounded-md placeholder-gray-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none bg-white"
+                                value={newBus.plate_number}
+                                onChange={e => setNewBus({ ...newBus, plate_number: e.target.value })}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-1">Vehicle type</label>
+                            <select
+                                className="w-full px-2.5 py-1.5 border border-gray-200 text-gray-900 text-xs rounded-md focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none bg-white"
+                                value={newBus.type}
+                                onChange={e => setNewBus({ ...newBus, type: e.target.value })}
+                            >
+                                <option>Standard</option>
+                                <option>Sleeper AC</option>
+                                <option>Semi-Sleeper</option>
+                                <option>Multi-Axle Volvo</option>
+                                <option>Mercedes Benz</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-[11px] font-medium text-gray-600 mb-1">Seating capacity</label>
+                            <input
+                                type="number"
+                                placeholder="40"
+                                className="w-full px-2.5 py-1.5 border border-gray-200 text-gray-900 font-mono text-xs rounded-md placeholder-gray-400 focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none bg-white"
+                                value={newBus.capacity}
+                                onChange={e => setNewBus({ ...newBus, capacity: parseInt(e.target.value) || 0 })}
+                            />
+                        </div>
+                        <div className="flex items-end gap-2">
+                            <button
+                                onClick={handleAddBus}
+                                className="flex-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-md transition"
+                            >
+                                Save vehicle
+                            </button>
+                            <button
+                                onClick={() => setShowAddForm(false)}
+                                className="px-3 py-1.5 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 text-xs font-medium rounded-md transition"
+                            >
+                                Cancel
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                        <tr className="text-sm text-gray-500 border-b border-gray-100">
-                            <th className="py-3 font-medium">Plate Number</th>
-                            <th className="py-3 font-medium">Type</th>
-                            <th className="py-3 font-medium">Capacity</th>
-                            <th className="py-3 font-medium">Status</th>
-                            <th className="py-3 font-medium text-right">Actions</th>
+                        <tr className="bg-gray-50/70 border-b border-gray-200 text-gray-500 font-medium">
+                            <th className="py-2.5 px-3">Plate number</th>
+                            <th className="py-2.5 px-3">Type</th>
+                            <th className="py-2.5 px-3">Capacity</th>
+                            <th className="py-2.5 px-3">Status</th>
+                            <th className="py-2.5 px-3 text-right">Action</th>
                         </tr>
                     </thead>
-                    <tbody className="text-gray-700">
+                    <tbody className="divide-y divide-gray-100 bg-white">
                         {loading ? (
-                            <tr><td colSpan={5} className="py-8 text-center text-gray-400">Loading fleet data...</td></tr>
+                            <tr><td colSpan={5} className="py-8 text-center text-gray-400 font-mono text-xs">Loading fleet data...</td></tr>
+                        ) : fleet.length === 0 ? (
+                            <tr><td colSpan={5} className="py-8 text-center text-gray-400 text-xs">No vehicles registered yet.</td></tr>
                         ) : fleet.map(bus => (
-                            <tr key={bus.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
-                                <td className="py-4 font-semibold text-gray-900">{bus.plate_number}</td>
-                                <td className="py-4">{bus.type}</td>
-                                <td className="py-4">{bus.capacity} Seats</td>
-                                <td className="py-4">
+                            <tr key={bus.id} className="hover:bg-gray-50/50 transition-colors group">
+                                <td className="py-3 px-3 font-mono font-semibold text-gray-900">{bus.plate_number}</td>
+                                <td className="py-3 px-3 text-gray-700">{bus.type}</td>
+                                <td className="py-3 px-3 font-mono tabular-nums text-gray-600">{bus.capacity} seats</td>
+                                <td className="py-3 px-3">
                                     <select
                                         value={bus.status}
                                         onChange={(e) => handleStatusUpdate(bus.id, e.target.value)}
-                                        className={`px-3 py-1 rounded-full text-xs font-bold border-0 cursor-pointer outline-none focus:ring-2 focus:ring-offset-1 transition-all ${bus.status === 'Available' ? 'bg-green-100 text-green-700 ring-green-200' :
-                                            bus.status === 'On Route' ? 'bg-blue-100 text-blue-700 ring-blue-200' :
-                                                'bg-red-100 text-red-700 ring-red-200'
-                                            }`}
+                                        className={`px-2 py-0.5 rounded text-[11px] font-medium border cursor-pointer outline-none transition ${
+                                            bus.status === 'Available'
+                                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                                : bus.status === 'On Route'
+                                                ? 'bg-blue-50 text-blue-800 border-blue-200'
+                                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                                        }`}
                                     >
                                         <option value="Available">Available</option>
                                         <option value="On Route">On Route</option>
                                         <option value="Maintenance">Maintenance</option>
                                     </select>
                                 </td>
-                                <td className="py-4 text-right">
+                                <td className="py-3 px-3 text-right">
                                     <button
                                         onClick={() => handleDelete(bus.id)}
-                                        className="text-red-500 hover:text-red-700 text-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                        className="text-gray-400 hover:text-rose-600 transition text-xs opacity-0 group-hover:opacity-100"
                                     >
                                         Delete
                                     </button>
